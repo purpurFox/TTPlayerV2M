@@ -13,11 +13,17 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 option(TTP_USE_ASM_SYNTH "Use original NASM synth engine (official timbre)" ON)
+option(TTP_ENABLE_RONAN "Enable RONAN speech synthesis" ON)
 
 set(TTP_V2M_ENGINE_SOURCES)
 if(TTP_USE_ASM_SYNTH)
   enable_language(ASM_NASM)
-  list(APPEND TTP_V2M_ENGINE_SOURCES src/v2m/synth.asm src/v2m/synth_stub.cpp)
+  list(APPEND TTP_V2M_ENGINE_SOURCES src/v2m/synth.asm)
+  if(TTP_ENABLE_RONAN)
+    list(APPEND TTP_V2M_ENGINE_SOURCES src/v2m/ronan.cpp)
+  else()
+    list(APPEND TTP_V2M_ENGINE_SOURCES src/v2m/synth_stub.cpp)
+  endif()
   set_source_files_properties(src/v2m/synth.asm PROPERTIES LANGUAGE ASM_NASM)
 else()
   list(APPEND TTP_V2M_ENGINE_SOURCES src/v2m/synth_core.cpp)
@@ -43,6 +49,10 @@ target_compile_definitions(ttp_v2m PRIVATE
   _WIN32_WINNT=0x0501 _CRT_SECURE_NO_WARNINGS
   V2MPLAYER_SYNC_FUNCTIONS=1
 )
+
+if(TTP_USE_ASM_SYNTH AND TTP_ENABLE_RONAN)
+  target_compile_definitions(ttp_v2m PRIVATE RONAN=1)
+endif()
 
 if(MSVC)
   target_compile_options(ttp_v2m PRIVATE "$<$<COMPILE_LANGUAGE:CXX>:/W3;/EHsc;/GR-;/O2;/fp:precise;/arch:SSE2>")

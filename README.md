@@ -13,6 +13,7 @@
   → `Reader` / `Metadata`
 - 输出：固定 **44100 Hz / 16-bit / 双声道**
 - 默认合成器：官方 `synth.asm`（NASM），与 Winamp 官方解码器同源
+- 语音合成：RONAN 默认启用（`ronan.cpp`，x87/`pow` 混合移植）
 - 支持旧版 V2M 的版本检测与转换（`v2mconv`）
 - 支持时长、Seek、Title 元数据
 - 对循环型 V2M 强制在报告时长处返回 `S_FALSE`，不会无限播放
@@ -54,6 +55,7 @@ cmake --build build
 
 如果不需要官方 ASM 引擎，可加
 `-DTTP_USE_ASM_SYNTH=OFF` 使用纯 C++ 回退（音色不保证逐位一致）。
+`-DTTP_ENABLE_RONAN=OFF` 可关闭语音合成。
 
 产物：
 
@@ -105,6 +107,19 @@ TTPlayer 集成：在 Xvfb 下启动
 之前的 C++ `synth_core.cpp` 路径在该曲目上明显缺少低频/中频音色；
 切换到官方 `synth.asm` 后差异消失。
 
+### 语音合成测试
+
+用同一 Winamp 宿主加载官方 `in_v2m.dll`，测试
+`V2mPlayer--fr-037_the_code_inside.v2m`：
+
+- 本插件：211.92 s，峰值 `1.0000`，RMS `0.3176`，PASS
+- 官方：212.91 s，RMS `0.3181`
+- 全曲 PCM 相关：约 `0.874`；前 30 秒约 `0.88–0.92`
+- 关闭 RONAN 时前 30 秒相关约 `0.868`，说明语音声部已进入输出
+
+语音能量和频段已对齐；由于 `ronan.cpp` 的 x87 数学与官方实现仍有
+细微差异，语音波形尚未逐位一致。
+
 ## 结构
 
 ```text
@@ -114,6 +129,8 @@ src/reader.cpp             Reader + Metadata 实现（V2M 解码）
 src/common.h               COM 辅助、HRESULT 保护、IStream 读取
 src/v2m/                   Farbrausch V2 上游源码（public domain）
 src/v2m/synth.asm          官方 ASM 合成器（默认引擎）
+src/v2m/ronan.cpp          RONAN 语音合成（x87/exp 移植）
+src/v2m/phonemtab.h        音素表
 src/v2m/synth_stub.cpp     RONAN 关闭时的 synthSetLyrics 占位
 src/v2m/synth_core.cpp     C++ 合成器（可选回退）
 src/v2m/v2init.cpp         v2mconv 所需的版本/尺寸表
@@ -142,7 +159,11 @@ tools/package.sh           生成 dist/ 与 SHA256
 4. `reader.cpp`：读取整个 IStream（上限 256 MiB），调用
    `CheckV2MVersion` / `ConvertV2M`，用
    `V2MPlayer::CalcPositions` 计算时长，并在达到时长后返回
-   `S_FALSE`；修复了停止后尾音计数反复重置导致的无限输出。
+   `S_FALSE`；修复了停止后尾音计数反复重置导致的无限输出，
+   以及最后一帧不足 1 ms 时位置不前进导致的 EOF 死循环。
+5. `ronan.cpp`：将 MSVC 内联汇编改为 GCC x87 `sFExp` +
+   `lrintf`/`pow`；修正 `extern "C" extern` 声明并补
+   `<string.h>`。
 
 默认构建使用官方 `synth.asm`（NASM 汇编），因此与 Winamp 官方
 `in_v2m.dll` 共用同一套合成器核心；这是音色对齐的关键。
@@ -154,9 +175,9 @@ tools/package.sh           生成 dist/ 与 SHA256
 - 仅注册 `.v2m`，不处理旧式 `.v2` 或其他 tracker 格式。
 - 打开时把整个流读入内存，单文件上限 256 MiB；不支持边下边播。
 - 固定 44.1 kHz / 16-bit / stereo，不做重采样。
-- `RONAN` 语音合成未启用；使用 speech 声部的 V2M 中人声部分
-  不会发声。`ronan.cpp` 含 MSVC 内联汇编，当前 ASM 构建将其关闭；
-  纯音乐/音色已与官方引擎对齐。
+- `RONAN` 语音合成已启用，语音声部会输出；但语音波形尚未与
+  官方逐位一致（全曲相关约 `0.874`，前 30 秒约 `0.88–0.92`）。
+  非语音音色仍与官方 ASM 引擎一致。
 - 无配置界面；`SetCallback` 为空实现。
 - 时长来自 tempo map 的 `CalcPositions`，末尾附加 2 秒；对极少数
   没有全局速度事件的旧文件会退化为文件头 `maxtime/timediv`。

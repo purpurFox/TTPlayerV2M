@@ -15,7 +15,7 @@
 
 %define   VUMETER
 %define   V2PROFILER 0                 ; profiling support. refer to tinyplayer
-;%define   RONAN  ; TTPlayerV2M: speech engine not linked
+; RONAN is defined by the build (TTP_ENABLE_RONAN).
 %define   FULLMIDI
 
 %define   SAMPLER 0

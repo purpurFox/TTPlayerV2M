@@ -100,6 +100,7 @@ class V2Reader final : public Reader, public Metadata {
                 tail_frames_ = 2 * kSampleRate;
         }
 
+        bool final_chunk = false;
         DWORD frames = std::min<DWORD>(capacity / kBlockAlign,
                                        kMaximumFramesPerRead);
         if (tail_frames_ && frames > tail_frames_)
@@ -109,6 +110,7 @@ class V2Reader final : public Reader, public Metadata {
                 (std::uint64_t(duration_ - position_ms_) * kSampleRate) / 1000;
             if (frames > remaining)
                 frames = DWORD(remaining);
+            final_chunk = frames == remaining;
         }
         require(frames > 0, E_INVALIDARG);
 
@@ -123,8 +125,11 @@ class V2Reader final : public Reader, public Metadata {
         }
         check(buffer->SetLength(frames * kBlockAlign));
 
-        if (playing)
+        if (playing) {
             position_ms_ += DWORD((std::uint64_t(frames) * 1000) / kSampleRate);
+            if (final_chunk)
+                position_ms_ = duration_;
+        }
         if (tail_frames_) {
             tail_frames_ = frames >= tail_frames_ ? 0 : tail_frames_ - frames;
             if (tail_frames_ == 0)
