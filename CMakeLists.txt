@@ -12,13 +12,24 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+option(TTP_USE_ASM_SYNTH "Use original NASM synth engine (official timbre)" ON)
+
+set(TTP_V2M_ENGINE_SOURCES)
+if(TTP_USE_ASM_SYNTH)
+  enable_language(ASM_NASM)
+  list(APPEND TTP_V2M_ENGINE_SOURCES src/v2m/synth.asm src/v2m/synth_stub.cpp)
+  set_source_files_properties(src/v2m/synth.asm PROPERTIES LANGUAGE ASM_NASM)
+else()
+  list(APPEND TTP_V2M_ENGINE_SOURCES src/v2m/synth_core.cpp)
+endif()
+
 add_library(ttp_v2m SHARED
   src/plugin.cpp
   src/reader.cpp
   src/v2m/v2init.cpp
   src/v2m/v2mplayer.cpp
   src/v2m/v2mconv.cpp
-  src/v2m/synth_core.cpp
+  ${TTP_V2M_ENGINE_SOURCES}
 )
 
 target_include_directories(ttp_v2m PRIVATE
@@ -34,13 +45,10 @@ target_compile_definitions(ttp_v2m PRIVATE
 )
 
 if(MSVC)
-  target_compile_options(ttp_v2m PRIVATE /W3 /EHsc /GR- /O2 /fp:precise /arch:SSE2)
+  target_compile_options(ttp_v2m PRIVATE "$<$<COMPILE_LANGUAGE:CXX>:/W3;/EHsc;/GR-;/O2;/fp:precise;/arch:SSE2>")
   target_link_libraries(ttp_v2m PRIVATE ole32 uuid shlwapi)
 else()
-  target_compile_options(ttp_v2m PRIVATE
-    -O2 -msse2 -fno-strict-aliasing -ffp-contract=off
-    -fno-asynchronous-unwind-tables
-  )
+  target_compile_options(ttp_v2m PRIVATE "$<$<COMPILE_LANGUAGE:CXX>:-O2;-msse2;-fno-strict-aliasing;-ffp-contract=off;-fno-asynchronous-unwind-tables>")
   target_link_libraries(ttp_v2m PRIVATE ole32 uuid shlwapi)
   target_link_options(ttp_v2m PRIVATE
     -static -static-libgcc -static-libstdc++ -Wl,--exclude-libs,ALL -Wl,--kill-at

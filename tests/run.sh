@@ -13,7 +13,7 @@ for name in pzero_new v2_zeitmaschine_new; do
   output_file="$cache/$name.wav"
   echo "== $name =="
   WINEDEBUG=-all wine "$host" \
-    "$(winepath -w "$dll")" \
-    "$(winepath -w "$source_file")" \
-    "$(winepath -w "$output_file")"
+    "$(wine winepath -w "$dll")" \
+    "$(wine winepath -w "$source_file")" \
+    "$(wine winepath -w "$output_file")"
 done

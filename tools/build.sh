@@ -6,6 +6,13 @@ if [ -z "$toolchain_root" ]; then
   toolchain_root=/home/mrfox/Library/dev/toolchains/mingw32
 fi
 export PATH="$toolchain_root/usr/bin:$PATH"
+nasm_root="${NASM_ROOT:-}"
+if [ -z "$nasm_root" ] && [ -d /home/mrfox/Library/dev/toolchains/nasm/usr/bin ]; then
+  nasm_root=/home/mrfox/Library/dev/toolchains/nasm/usr/bin
+fi
+if [ -n "$nasm_root" ]; then
+  export PATH="$nasm_root:$PATH"
+fi
 build_dir="$root/build"
 if [ "$#" -ge 1 ]; then
   build_dir="$1"

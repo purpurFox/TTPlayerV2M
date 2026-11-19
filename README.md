@@ -12,6 +12,7 @@
 - 宿主接口：`ttpGetSoundAddIn` → `AddIn` → `ReaderCreator`
   → `Reader` / `Metadata`
 - 输出：固定 **44100 Hz / 16-bit / 双声道**
+- 默认合成器：官方 `synth.asm`（NASM），与 Winamp 官方解码器同源
 - 支持旧版 V2M 的版本检测与转换（`v2mconv`）
 - 支持时长、Seek、Title 元数据
 - 对循环型 V2M 强制在报告时长处返回 `S_FALSE`，不会无限播放
@@ -27,26 +28,32 @@
 - 32 位 MinGW-w64 交叉编译器：`i686-w64-mingw32-g++`、
   `i686-w64-mingw32-gcc`，并带有静态 `libstdc++` 与
   `libwinpthread`
+- NASM ≥ 2.16（默认用官方 `synth.asm` 合成器）
 
 本机工具链从 Fedora 43 的 `mingw32-*` RPM 解包到
-`/home/mrfox/Library/dev/toolchains/mingw32`。其他路径可通过
-`MINGW32_ROOT` 指定（应指向包含 `usr/bin/i686-w64-mingw32-g++`
-的前缀）。
+`/home/mrfox/Library/dev/toolchains/mingw32`，NASM 解包到
+`/home/mrfox/Library/dev/toolchains/nasm`。其他路径可通过
+`MINGW32_ROOT` / `NASM_ROOT` 指定（分别指向包含
+`usr/bin/i686-w64-mingw32-g++` 和 `usr/bin/nasm` 的前缀）。
 
 ```bash
 export MINGW32_ROOT=/path/to/mingw32-prefix
+export NASM_ROOT=/path/to/nasm-prefix
 ./tools/build.sh
 ```
 
 等价的手动命令：
 
 ```bash
-export PATH="$MINGW32_ROOT/usr/bin:$PATH"
+export PATH="$MINGW32_ROOT/usr/bin:$NASM_ROOT/usr/bin:$PATH"
 cmake -S . -B build -G Ninja \
   -DCMAKE_TOOLCHAIN_FILE=cmake/mingw32.cmake \
   -DCMAKE_BUILD_TYPE=Release
 cmake --build build
 ```
+
+如果不需要官方 ASM 引擎，可加
+`-DTTP_USE_ASM_SYNTH=OFF` 使用纯 C++ 回退（音色不保证逐位一致）。
 
 产物：
 
@@ -77,13 +84,26 @@ WAV 到 `$HOME/.cache/ttpv2m`，并验证时长、Seek、峰值和 EOF。
 
 | 文件 | 报告时长 | 实际解码 | 峰值 | RMS | 结果 |
 | --- | ---: | ---: | ---: | ---: | --- |
-| `pzero_new.v2m` | 232806 ms | 233.83 s / 41,247,264 B | 1.0000 | 0.1892 | PASS |
-| `v2_zeitmaschine_new.v2m` | 166536 ms | 166.95 s / 29,450,784 B | 1.0000 | 0.1186 | PASS |
+| `pzero_new.v2m` | 232806 ms | 233.83 s / 41,247,264 B | 1.0000 | 0.2001 | PASS |
+| `v2_zeitmaschine_new.v2m` | 166536 ms | 166.95 s / 29,450,784 B | 1.0000 | 0.1225 | PASS |
 
 TTPlayer 集成：在 Xvfb 下启动
 `TTPlayerRebuild.exe pzero_new.v2m`，界面显示 `pzero_new`、
 `3:52`、`44 kHz stereo`，播放进度正常推进（见
 `docs/ttplayer.png`，截图时间 00:08）。
+
+### 与官方解码器对齐
+
+用 Winamp 2 宿主加载官方 `in_v2m.dll`，与 `ttp_v2m.dll` 解码
+`iOTA-MTop_HTML_Password_Lock_5.0_nfo_1.v2m` 的 PCM 逐样本比较：
+
+- 全曲相关系数：`0.99999+`（前 30 秒 `0.9999967`）
+- 相对 PCM 差异：约 `1.1e-4`
+- 各频段能量比：`1.0000x`（20 Hz–22 kHz）
+- 全曲 RMS：官方 `0.171828`，本插件 `0.171833`
+
+之前的 C++ `synth_core.cpp` 路径在该曲目上明显缺少低频/中频音色；
+切换到官方 `synth.asm` 后差异消失。
 
 ## 结构
 
@@ -93,6 +113,9 @@ src/plugin.cpp             ttpGetSoundAddIn / AddIn / ReaderCreator
 src/reader.cpp             Reader + Metadata 实现（V2M 解码）
 src/common.h               COM 辅助、HRESULT 保护、IStream 读取
 src/v2m/                   Farbrausch V2 上游源码（public domain）
+src/v2m/synth.asm          官方 ASM 合成器（默认引擎）
+src/v2m/synth_stub.cpp     RONAN 关闭时的 synthSetLyrics 占位
+src/v2m/synth_core.cpp     C++ 合成器（可选回退）
 src/v2m/v2init.cpp         v2mconv 所需的版本/尺寸表
 tests/test_host.cpp        独立 ABI 测试宿主
 tests/data/                上游示例 V2M
@@ -121,8 +144,10 @@ tools/package.sh           生成 dist/ 与 SHA256
    `V2MPlayer::CalcPositions` 计算时长，并在达到时长后返回
    `S_FALSE`；修复了停止后尾音计数反复重置导致的无限输出。
 
-上游 `synth_core.cpp` 是 C++ 合成器实现，因此不需要 NASM/YASM，
-也不需要 Winamp/Buzz SDK。
+默认构建使用官方 `synth.asm`（NASM 汇编），因此与 Winamp 官方
+`in_v2m.dll` 共用同一套合成器核心；这是音色对齐的关键。
+`synth_core.cpp` 仍保留为 `-DTTP_USE_ASM_SYNTH=OFF` 的纯 C++
+回退，但该路径不保证与官方逐位一致。两者都不需要 Winamp/Buzz SDK。
 
 ## 已知限制
 
@@ -130,7 +155,8 @@ tools/package.sh           生成 dist/ 与 SHA256
 - 打开时把整个流读入内存，单文件上限 256 MiB；不支持边下边播。
 - 固定 44.1 kHz / 16-bit / stereo，不做重采样。
 - `RONAN` 语音合成未启用；使用 speech 声部的 V2M 中人声部分
-  不会发声（上游 C++ 核在未定义 `RONAN` 时如此）。
+  不会发声。`ronan.cpp` 含 MSVC 内联汇编，当前 ASM 构建将其关闭；
+  纯音乐/音色已与官方引擎对齐。
 - 无配置界面；`SetCallback` 为空实现。
 - 时长来自 tempo map 的 `CalcPositions`，末尾附加 2 秒；对极少数
   没有全局速度事件的旧文件会退化为文件头 `maxtime/timediv`。
