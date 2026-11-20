@@ -3,12 +3,12 @@ set -euo pipefail
 root="$(cd "$(dirname "$BASH_SOURCE")/.." && pwd)"
 toolchain_root="${MINGW32_ROOT:-}"
 if [ -z "$toolchain_root" ]; then
-  toolchain_root=/home/mrfox/Library/dev/toolchains/mingw32
+  toolchain_root=$HOME/Library/dev/toolchains/mingw32
 fi
 export PATH="$toolchain_root/usr/bin:$PATH"
 nasm_root="${NASM_ROOT:-}"
-if [ -z "$nasm_root" ] && [ -d /home/mrfox/Library/dev/toolchains/nasm/usr/bin ]; then
-  nasm_root=/home/mrfox/Library/dev/toolchains/nasm/usr/bin
+if [ -z "$nasm_root" ] && [ -d $HOME/Library/dev/toolchains/nasm/usr/bin ]; then
+  nasm_root=$HOME/Library/dev/toolchains/nasm/usr/bin
 fi
 if [ -n "$nasm_root" ]; then
   export PATH="$nasm_root:$PATH"

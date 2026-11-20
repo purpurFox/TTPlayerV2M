@@ -32,8 +32,8 @@
 - NASM ≥ 2.16（默认用官方 `synth.asm` 合成器）
 
 本机工具链从 Fedora 43 的 `mingw32-*` RPM 解包到
-`/home/mrfox/Library/dev/toolchains/mingw32`，NASM 解包到
-`/home/mrfox/Library/dev/toolchains/nasm`。其他路径可通过
+`$HOME/Library/dev/toolchains/mingw32`，NASM 解包到
+`$HOME/Library/dev/toolchains/nasm`。其他路径可通过
 `MINGW32_ROOT` / `NASM_ROOT` 指定（分别指向包含
 `usr/bin/i686-w64-mingw32-g++` 和 `usr/bin/nasm` 的前缀）。
 
