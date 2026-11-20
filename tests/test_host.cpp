@@ -1,4 +1,5 @@
 #include "ttp_player_abi.h"
+#include "ttpcomm/audio_format_probe.h"
 
 #include <shlwapi.h>
 #include <shellapi.h>
@@ -180,10 +181,55 @@ int main() {
         stream->Seek(zero, STREAM_SEEK_SET, nullptr);
     }
 
+    {
+        ttp::format::Probe *probe = nullptr;
+        if (SUCCEEDED(creator->QueryInterface(
+                ttp::format::iid_probe, reinterpret_cast<void **>(&probe))) &&
+            probe) {
+            BYTE header[65536]{};
+            ULONG got = 0;
+            LARGE_INTEGER zero{};
+            stream->Seek(zero, STREAM_SEEK_SET, nullptr);
+            stream->Read(header, sizeof(header), &got);
+            stream->Seek(zero, STREAM_SEEK_SET, nullptr);
+            ttp::format::Request request{};
+            request.data = header;
+            request.bytes = got;
+            ttp::format::Result result{};
+            result.size = sizeof(result);
+            result.version = ttp::format::abi_version;
+            const HRESULT phr = probe->ProbeFormat(&request, &result);
+            std::printf("probe: hr=0x%08lX confidence=%lu family=%lu "
+                        "codec=%s ext=%ls\n",
+                        (unsigned long)phr, (unsigned long)result.confidence,
+                        (unsigned long)result.family, result.codec,
+                        result.extension);
+            probe->Release();
+        }
+    }
+
     hr = reader->Open(stream, 0);
     std::printf("Open: 0x%08lX\n", (unsigned long)hr);
     if (FAILED(hr))
         return 5;
+
+    {
+        ttp::format::SourceInfo *info = nullptr;
+        if (SUCCEEDED(reader->QueryInterface(
+                ttp::format::iid_info, reinterpret_cast<void **>(&info))) &&
+            info) {
+            ttp::format::Result result{};
+            result.size = sizeof(result);
+            result.version = ttp::format::abi_version;
+            const HRESULT ihr = info->GetFormatInfo(&result);
+            std::printf("info: hr=0x%08lX confidence=%lu family=%lu "
+                        "codec=%s ext=%ls\n",
+                        (unsigned long)ihr, (unsigned long)result.confidence,
+                        (unsigned long)result.family, result.codec,
+                        result.extension);
+            info->Release();
+        }
+    }
 
     DWORD duration = 0;
     DWORD buffer_size = 0;
