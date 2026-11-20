@@ -143,8 +143,10 @@ public:
         InitializeCriticalSectionAndSpinCount(&lock_, 4000);
     }
     ~V2Reader() {
-        LockGuard guard(&lock_);
-        reset_locked();
+        {
+            LockGuard guard(&lock_);
+            reset_locked();
+        }
         DeleteCriticalSection(&lock_);
     }
 
