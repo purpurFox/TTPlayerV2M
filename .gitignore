@@ -1,5 +1,4 @@
 build/
-.wine-test/
 *.o
 *.dll
 *.exe

@@ -1,5 +1,3 @@
-#define V2MPLAYER_SYNC_FUNCTIONS 1
-
 #include "common.h"
 #include "ttpcomm/audio_format_probe.h"
 #include "v2m/types.h"
@@ -7,7 +5,6 @@
 #include "v2m/v2mconv.h"
 #include "v2m/v2init.h"
 
-#include <cmath>
 #include <cstdint>
 #include <cwchar>
 

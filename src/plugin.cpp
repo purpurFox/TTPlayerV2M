@@ -5,7 +5,6 @@
 #include <cstring>
 
 namespace ttp {
-HMODULE module{};
 HRESULT make_reader(void **out);
 } // namespace ttp
 
@@ -165,7 +164,6 @@ extern "C" HRESULT WINAPI ttpGetSoundAddIn(void **out) {
 
 BOOL WINAPI DllMain(HINSTANCE instance, DWORD reason, LPVOID) {
     if (reason == DLL_PROCESS_ATTACH) {
-        ttp::module = instance;
         DisableThreadLibraryCalls(instance);
         v2_init_version_tables();
     }

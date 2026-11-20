@@ -42,7 +42,7 @@ for a reader plugin `category` is `ttp::cat_reader` and `object` is an
 | `CodecName` | `V2|Farbrausch V2 Module`. |
 | `Bitrate` | `file_size * 8000 / duration`. |
 | `BitDepth` | 16. |
-| `SetCallback` | Returns `S_OK`; the decoder does not issue callbacks. |
+| `SetCallback` | Stores the host callback and forwards it to the stream when the stream exposes the callback interface (`1717a4a7-a3dc-416b-a297-7216749bd7bf`). Returns `S_OK` when the stream has no such interface. |
 | `Start` | Clears the abort flag and starts/restarts the synth at the current position. |
 | `Stop` | Sets the abort flag; subsequent `Read` returns `E_ABORT` until `Start`/`Seek`. |
 | `Read` | Renders PCM; returns `S_FALSE` at end of track/tail. |
@@ -55,10 +55,21 @@ prevents the tail from restarting.
 
 ## Export decoration
 
-The DLL is built as 32-bit PE with MinGW:
+The DLL is built as 32-bit PE with MSVC x86:
 
-- `extern "C" __declspec(dllexport) HRESULT WINAPI ttpGetSoundAddIn(...)`
-- linker option `-Wl,--kill-at`
+- `extern "C" HRESULT WINAPI ttpGetSoundAddIn(void **)`
+- export table entry in `src/ttp_v2m.def`:
+  `ttpGetSoundAddIn=_ttpGetSoundAddIn@4 @1`
 
 This produces the undecorated export `ttpGetSoundAddIn`, matching the
 original `ttp_mod.dll` / `ttp_flac.dll` convention.
+
+## Optional probe interfaces
+
+| Interface | GUID | Purpose |
+| --- | --- | --- |
+| `ttp::format::Probe` | `7e892943-481a-43db-a89b-5993f50b6049` | Header-only format probe on the `ReaderCreator`. |
+| `ttp::format::SourceInfo` | `b58ee1a2-812c-4920-920e-5be9379f3132` | Formats decided after `Open`, queried on the `Reader`. |
+
+Both are optional: hosts may query them with `QueryInterface` and must
+handle `E_NOINTERFACE`.
