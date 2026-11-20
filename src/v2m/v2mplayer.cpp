@@ -9,11 +9,8 @@
 /*************************************************************************************/
 
 
-#define V2MPLAYER_SYNC_FUNCTIONS 1
-
 #include "v2mplayer.h"
 #include "libv2.h"
-#include <string.h>
 
 #define GETDELTA(p, w) ((p)[0]+((p)[w]<<8)+((p)[2*w]<<16))
 #define UPDATENT(n, v, p, w) if ((n)<(w)) { (v)=m_state.time+GETDELTA((p), (w)); if ((v)<m_state.nexttime) m_state.nexttime=(v); }
@@ -29,14 +26,19 @@ namespace
   //////////////////////////////////////////////////////////////////////////////////////////////////////
 	{
 		// performs 64bit (nexttime-time)*usecs/td2 and a 32.32bit addition to smpldelta:smplrem
-		const sU64 value = sU64(nexttime - time) * usecs;
-		sU32 quotient = sU32(value / td2);
-		const sU32 remainder = sU32(value % td2);
-		const sU32 previous = *smplrem;
-		*smplrem = previous + remainder;
-		if (*smplrem < previous)
-			++quotient;
-		*smpldelta = quotient;
+		__asm {
+			mov eax, [nexttime]
+			sub eax, [time]
+			mov ebx, [usecs]
+			mul ebx
+			mov ebx, [td2]
+			div ebx
+			mov ecx, [smplrem]
+			add [ecx], edx
+			adc eax, 0
+			mov ecx, [smpldelta]
+			mov [ecx], eax
+		}
 	}
 }
 
@@ -308,7 +310,17 @@ void V2MPlayer::Play(sU32 a_time)
 	Reset();
 
 	m_base.valid=sFALSE;
-	sU32 destsmpl=sU32((sU64(a_time)*m_samplerate)/m_tpc), cursmpl=0;
+	sU32 destsmpl, cursmpl=0;
+	__asm
+	{
+		mov  ecx, this
+		mov	 eax, [a_time]
+		mov  ebx, [ecx + m_samplerate]
+		imul ebx
+		mov  ebx, [ecx + m_tpc]
+		idiv ebx
+		mov  [destsmpl], eax
+	}
 
 	m_state.state=PlayerState::PLAYING;
 	m_state.smpldelta=0;
@@ -340,7 +352,17 @@ void V2MPlayer::Stop(sU32 a_fadetime)
 
 	if (a_fadetime)
 	{
-		const sU32 ftsmpls=sU32((sU64(a_fadetime)*m_samplerate)/m_tpc);
+		sU32 ftsmpls;
+		__asm
+		{
+			mov  ecx, this
+			mov	 eax, [a_fadetime]
+			mov  ebx, [ecx + m_samplerate]
+			imul ebx
+			mov  ebx, [ecx + m_tpc]
+			idiv ebx
+			mov  [ftsmpls], eax
+		}
 		m_fadedelta=m_fadeval/ftsmpls;
 	}
 	else
@@ -383,7 +405,15 @@ void V2MPlayer::Render(sF32 *a_buffer, sU32 a_len, sBool a_add)
 	else if (m_state.state==PlayerState::OFF || !m_base.valid)
 	{
     if (!a_add)
-      memset(a_buffer, 0, size_t(a_len) * 2 * sizeof(sF32));
+    {
+		  __asm {
+			  mov edi, [a_buffer]
+			  mov ecx, [a_len]
+			  shl ecx, 1
+			  xor eax, eax
+			  rep stosd
+		  }
+    }
 	}
 	else
 	{

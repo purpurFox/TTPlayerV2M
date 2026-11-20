@@ -1,5 +1,8 @@
 #include "common.h"
 #include "v2m/v2init.h"
+#include "ttpcomm/audio_format_probe.h"
+
+#include <cstring>
 
 namespace ttp {
 HMODULE module{};
@@ -8,7 +11,27 @@ HRESULT make_reader(void **out);
 
 namespace {
 
-class Factory final : public ttp::ReaderCreator {
+template <size_t N>
+void set_text(char (&dst)[N], const char *src) noexcept {
+    if (!src)
+        return;
+    size_t i = 0;
+    for (; i + 1 < N && src[i]; ++i)
+        dst[i] = src[i];
+    dst[i] = 0;
+}
+
+template <size_t N>
+void set_text(wchar_t (&dst)[N], const wchar_t *src) noexcept {
+    if (!src)
+        return;
+    size_t i = 0;
+    for (; i + 1 < N && src[i]; ++i)
+        dst[i] = src[i];
+    dst[i] = 0;
+}
+
+class Factory final : public ttp::ReaderCreator, public ttp::format::Probe {
     LONG refs_{1};
 
 public:
@@ -16,6 +39,11 @@ public:
         if (!p)
             return E_POINTER;
         *p = nullptr;
+        if (ttp::same(iid, ttp::format::iid_probe)) {
+            *p = static_cast<ttp::format::Probe *>(this);
+            AddRef();
+            return S_OK;
+        }
         if (ttp::same(iid, IID_IUnknown) || ttp::same(iid, ttp::cat_reader)) {
             *p = static_cast<ttp::ReaderCreator *>(this);
             AddRef();
@@ -40,6 +68,47 @@ public:
     }
     HRESULT STDMETHODCALLTYPE Extensions(wchar_t **p) override {
         return ttp::text(L"Farbrausch V2(*.v2m)", p);
+    }
+
+    HRESULT STDMETHODCALLTYPE ProbeFormat(
+        const ttp::format::Request *request,
+        ttp::format::Result *result) override {
+        if (!request || !result)
+            return E_POINTER;
+        if (request->size != sizeof(ttp::format::Request) ||
+            request->version != ttp::format::abi_version ||
+            result->size != sizeof(ttp::format::Result) ||
+            result->version != ttp::format::abi_version)
+            return E_INVALIDARG;
+        if (request->bytes > ttp::format::prefix_limit ||
+            (!request->data && request->bytes))
+            return E_INVALIDARG;
+
+        *result = ttp::format::Result{};
+        result->size = sizeof(ttp::format::Result);
+        result->version = ttp::format::abi_version;
+
+        if (request->bytes < 12) {
+            result->confidence = ttp::format::NeedMore;
+            result->required_bytes = 12;
+            return S_OK;
+        }
+
+        uint32_t timediv = 0, maxtime = 0, gdnum = 0;
+        std::memcpy(&timediv, request->data, 4);
+        std::memcpy(&maxtime, request->data + 4, 4);
+        std::memcpy(&gdnum, request->data + 8, 4);
+        if (timediv != 128 || !maxtime || !gdnum || gdnum > 1024)
+            return S_FALSE;
+
+        result->family = ttp::format::Module;
+        result->confidence = ttp::format::Strong;
+        set_text(result->container, "v2m");
+        set_text(result->codec, "v2m");
+        set_text(result->extension, L".v2m");
+        set_text(result->aliases, L"");
+        set_text(result->display, L"Farbrausch V2 Module");
+        return S_OK;
     }
 };
 
@@ -84,7 +153,7 @@ public:
 
 } // namespace
 
-extern "C" __declspec(dllexport) HRESULT WINAPI ttpGetSoundAddIn(void **out) {
+extern "C" HRESULT WINAPI ttpGetSoundAddIn(void **out) {
     if (!out)
         return E_POINTER;
     *out = nullptr;

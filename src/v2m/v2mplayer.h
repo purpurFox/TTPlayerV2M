@@ -28,12 +28,12 @@ typedef char              sChar;
 typedef signed   char     sS8;
 typedef signed   short    sS16;
 typedef signed   long     sS32;
-typedef signed   long long  sS64;
+typedef signed   __int64  sS64;
 
 typedef unsigned char     sU8;
 typedef unsigned short    sU16;
 typedef unsigned long     sU32;
-typedef unsigned long long  sU64;
+typedef unsigned __int64  sU64;
 
 typedef float             sF32;
 typedef double            sF64;
@@ -230,7 +230,7 @@ private:
 	};
 
   // \o/
-  sU8         m_synth[3*1024*1024];   // TODO: keep me uptodate or use "new"
+  sU8         m_synth[4*1024*1024];   // TODO: keep me uptodate or use "new"
 
 	// member variables
 	sU32        m_tpc;

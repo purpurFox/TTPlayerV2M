@@ -15,7 +15,7 @@
 
 %define   VUMETER
 %define   V2PROFILER 0                 ; profiling support. refer to tinyplayer
-; RONAN is defined by the build (TTP_ENABLE_RONAN).
+%define		RONAN
 %define   FULLMIDI
 
 %define   SAMPLER 0

@@ -1,6 +1,7 @@
 #define V2MPLAYER_SYNC_FUNCTIONS 1
 
 #include "common.h"
+#include "ttpcomm/audio_format_probe.h"
 #include "v2m/types.h"
 #include "v2m/v2mplayer.h"
 #include "v2m/v2mconv.h"
@@ -8,6 +9,7 @@
 
 #include <cmath>
 #include <cstdint>
+#include <cwchar>
 
 namespace ttp {
 namespace {
@@ -19,6 +21,8 @@ constexpr DWORD kBlockAlign = kChannels * (kBits / 8);
 constexpr DWORD kBytesPerSecond = kSampleRate * kBlockAlign;
 constexpr std::uint64_t kMaximumFile = 256ull * 1024 * 1024;
 constexpr DWORD kMaximumFramesPerRead = 65536;
+inline constexpr GUID stream_callback_id{
+    0x1717a4a7, 0xa3dc, 0x416b, {0xa2, 0x97, 0x72, 0x16, 0x74, 0x9b, 0xd7, 0xbf}};
 
 inline int16_t pcm16(float value) {
     if (!(value == value))
@@ -33,7 +37,7 @@ inline int16_t pcm16(float value) {
 
 } // namespace
 
-class V2Reader final : public Reader, public Metadata {
+class V2Reader final : public Reader, public Metadata, public ttp::format::SourceInfo {
     LONG refs_{1};
     CRITICAL_SECTION lock_{};
     Bytes file_;
@@ -49,6 +53,22 @@ class V2Reader final : public Reader, public Metadata {
     bool abort_{};
     std::wstring title_;
     std::vector<float> floats_;
+    ComPtr<IStream> stream_;
+    ComPtr<IUnknown> callback_;
+    ttp::format::Result info_{};
+    bool info_ready_{};
+
+    HRESULT apply_callback(IUnknown *p) {
+        if (!stream_ || !p)
+            return S_OK;
+        ComPtr<IUnknown> ext;
+        if (FAILED(stream_->QueryInterface(
+                stream_callback_id, reinterpret_cast<void **>(ext.put()))))
+            return S_OK;
+        using Fn = HRESULT(STDMETHODCALLTYPE *)(IUnknown *, IUnknown *);
+        auto **v = *reinterpret_cast<void ***>(ext.p);
+        return reinterpret_cast<Fn>(v[4])(ext.p, p);
+    }
 
     void reset_locked() {
         if (player_) {
@@ -58,6 +78,10 @@ class V2Reader final : public Reader, public Metadata {
         converted_.clear();
         file_.clear();
         floats_.clear();
+        stream_.reset();
+        callback_.reset();
+        info_ready_ = false;
+        info_ = ttp::format::Result{};
         duration_ = position_ms_ = tail_frames_ = 0;
         tail_done_ = false;
         started_ = abort_ = false;
@@ -117,6 +141,7 @@ class V2Reader final : public Reader, public Metadata {
         floats_.resize(size_t(frames) * 2);
         player_->Render(floats_.data(), frames);
 
+
         for (DWORD i = 0; i < frames; ++i) {
             const int16_t left = pcm16(floats_[2 * i]);
             const int16_t right = pcm16(floats_[2 * i + 1]);
@@ -158,6 +183,8 @@ public:
             *out = static_cast<Reader *>(this);
         else if (same(iid, iid_metadata))
             *out = static_cast<Metadata *>(this);
+        else if (same(iid, ttp::format::iid_info))
+            *out = static_cast<ttp::format::SourceInfo *>(this);
         else
             return E_NOINTERFACE;
         AddRef();
@@ -176,6 +203,8 @@ public:
     HRESULT STDMETHODCALLTYPE Open(IStream *stream, DWORD) override {
         const HRESULT hr = protect([&] {
             require(stream != nullptr, E_POINTER);
+            stream_.reset(stream);
+            stream->AddRef();
             LockGuard guard(&lock_);
             require(player_ == nullptr, E_UNEXPECTED);
 
@@ -223,6 +252,20 @@ public:
             title_ = stream_title(stream);
             if (title_.empty())
                 title_ = L"Farbrausch V2 Module";
+
+            info_ = ttp::format::Result{};
+            info_.size = sizeof(info_);
+            info_.version = ttp::format::abi_version;
+            info_.family = ttp::format::Module;
+            info_.confidence = ttp::format::Opened;
+            strcpy_s(info_.container, "v2m");
+            strcpy_s(info_.codec, "v2m");
+            wcscpy_s(info_.extension, L".v2m");
+            wcscpy_s(info_.aliases, L"");
+            wcscpy_s(info_.display, L"Farbrausch V2 Module");
+            info_ready_ = true;
+            if (callback_)
+                apply_callback(callback_.p);
 
             position_ms_ = 0;
             tail_frames_ = 0;
@@ -286,7 +329,27 @@ public:
         *p = WORD(kBits);
         return S_OK;
     }
-    HRESULT STDMETHODCALLTYPE SetCallback(IUnknown *) override { return S_OK; }
+    HRESULT STDMETHODCALLTYPE SetCallback(IUnknown *p) override {
+        LockGuard guard(&lock_);
+        callback_.reset(p);
+        if (p)
+            p->AddRef();
+        return apply_callback(p);
+    }
+
+    HRESULT STDMETHODCALLTYPE GetFormatInfo(ttp::format::Result *out) override {
+        if (!out)
+            return E_POINTER;
+        if (out->size != sizeof(*out) || out->version != ttp::format::abi_version)
+            return E_INVALIDARG;
+        *out = ttp::format::Result{};
+        if (!player_)
+            return E_UNEXPECTED;
+        if (!info_ready_)
+            return S_FALSE;
+        *out = info_;
+        return S_OK;
+    }
 
     HRESULT STDMETHODCALLTYPE Start() override {
         return protect([&] {

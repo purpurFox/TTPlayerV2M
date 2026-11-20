@@ -16,27 +16,14 @@ static sInt sFtol(const float f)
   return (sInt)lrintf(f);
 }
 
-static sF64 sFExp(sF64 f)
-{
-  __asm__ __volatile__(
-      "fldl %0\n\t"
-      "fldl2e\n\t"
-      "fmulp\n\t"
-      "fld1\n\t"
-      "fld %%st(1)\n\t"
-      "fprem\n\t"
-      "f2xm1\n\t"
-      "faddp\n\t"
-      "fscale\n\t"
-      "fstp %%st(1)\n\t"
-      "fstpl %0\n\t"
-      : "+m"(f) : : "st");
-  return f;
-}
-
 static sF64 sFPow(sF64 a, sF64 b)
 {
   return pow(a, b);
+}
+
+static sF64 sFExp(sF64 f)
+{
+  return exp(f);
 }
 
 #ifndef sCopyMem
@@ -308,8 +295,8 @@ extern "C" void __stdcall ronanCBSetSR(syWRonan *ptr,sU32 sr)
 extern "C" void __stdcall ronanCBInit(syWRonan *wsptr)
 {
 	// convert phoneme table to a usable format
-	const sS8 *ptr=(const sS8*)rawphonemes;
-	sS32 val=0;
+	register const sS8 *ptr=(const sS8*)rawphonemes;
+	register sS32 val=0;
 	for (sInt f=0; f<(PTABSIZE/NPHONEMES); f++)
 	{
 		sF32 *dest=((sF32*)phonemes)+f;
@@ -518,7 +505,7 @@ extern "C" void __stdcall ronanCBProcess(syWRonan *wsptr,sF32 *buf, sU32 len)
 
 }
 
-extern "C" void* __stdcall synthGetSpeechMem(void *a_pthis);
+extern "C" extern void* __stdcall synthGetSpeechMem(void *a_pthis);
 
 extern "C" void __stdcall synthSetLyrics(void *a_pthis,const char **a_ptr)
 {
