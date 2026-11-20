@@ -29,7 +29,7 @@ Farbrausch V2（.v2m）解码器，使用 TTPlayer 的 Sound AddIn ABI
 - Ninja
 - MSVC x86（本机 14.52.37025）
 - Windows SDK 10.0.26100.0
-- NASM（synth.asm）
+- NASM（synth.asm；本机位于 $HOME/Library/.toolchains/nasm/usr/bin）
 - Wine 8（本机 GE-Proton8-30-rtsp-3 自带的 Wine 8.0 Staging）
 
 本机工具链安装在 $HOME/Library/.msvc，Wine prefix 为

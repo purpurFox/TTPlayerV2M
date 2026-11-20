@@ -2,7 +2,7 @@
 set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"
 . "$HOME/Library/.msvc/activate-x86.sh"
-export PATH="$HOME/Library/dev/toolchains/nasm/usr/bin:$PATH"
+export PATH="$HOME/Library/.toolchains/nasm/usr/bin:$PATH"
 build_dir="$root/build"
 if [ "$#" -ge 1 ]; then
   build_dir="$1"
